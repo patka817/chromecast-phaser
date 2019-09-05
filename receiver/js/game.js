@@ -1,3 +1,7 @@
+const deserializeState = (state) => {
+
+};
+
 const makeBreakoutScene = (updateCallback) => {
     updateCallback = updateCallback || (() => { });
     var Breakout = new Phaser.Class({
@@ -132,21 +136,17 @@ const makeBreakoutScene = (updateCallback) => {
 };
 
 var config = {
-    type: Phaser.CANVAS,
+    type: Phaser.AUTO,
     width: 800,
     height: 600,
-    parent: 'phaser-example',
+    parent: 'nes-wrapper',
     physics: {
         default: 'arcade'
     }
 };
 // TODO: allow overriden config params
-const startGame = ({ canvas = null, updateCallback = null }) => {
-    if (canvas) {
-        config.canvas = canvas;
-        delete config.parent;
-    }
-    config.scene = makeBreakoutScene(updateCallback);
+const startGame = () => {
+    config.scene = makeBreakoutScene();
     var game = new Phaser.Game(config);
     return game;
 }

@@ -15,6 +15,7 @@
     </section>
   </div>
 </body>
+<script src="js/State.js"></script>
 <script src="js/jquery-1.4.2.min.js"></script>
 <script src="js/dynamicaudio-min.js"></script>
 <script src="js/phaser.min.js"></script>
@@ -22,13 +23,14 @@
 <script src="js/peerjs.min.js"></script>
 
 <script>
+  // TODO: Config object in seperate file
   const applicationId = 'F1F2B4A5';
   const namespace = 'urn:x-cast:se.patrikkarlsson.cast.snes-cast';
-  const USE_WEBRTC = true;
-  const USE_WEBRTC_DATACHANNEL = false;
+  const STREAM_CANVAS = true;
   const WEBRTC_FRAME_RATE = 60;
-  const OFFSCREEN_RENDERING = true;
   const CANVAS_SIZE = { width: 512, height: 512 };
+  const PING_INTERVAL = 1000*60;
+  const DEBUG = false;
 
   let castPeerId;
   let castMediaConnection;
@@ -96,7 +98,7 @@
       return;
     }
     let parsedMessage = JSON.parse(message);
-    console.log('Recieved message: ' + parsedMessage);
+    console.log('Recieved message: ' + JSON.stringify(parsedMessage));
 
     if (parsedMessage.type == 'castPeerId') {
         setCastPeerId(parsedMessage.peerId);
@@ -119,21 +121,25 @@
     }
   };
 
+  const shouldCall = () => {
+    if (!STREAM_CANVAS) {
+      return false;
+    }
+    return castPeerId && !isConnected(castMediaConnection) && localStream;
+  };
+
+  const isConnected = (connection) => {
+    return connection && connection.open === true;
+  }
+
   const setCastPeerId = (id) => {
     console.log('Setting castPeerId');
     castPeerId = id;
-    if (castPeerId && !castMediaConnection && localStream) {
+
+    if (shouldCall()) {
       castMediaConnection = myPeer.call(castPeerId, localStream);
-      // the event handlers doesn't seem to work .. 
       initializeGame();
       game.paused = false;
-      castMediaConnection.on('stream', () => {
-        initializeGame();
-        if (game.paused === true) {
-          game.paused = false;
-        }
-      });
-
       const pause = () => {
         if (game) {
           game.paused = true;
@@ -141,15 +147,14 @@
       };
       castMediaConnection.on('error', pause);
       castMediaConnection.on('close', pause);
-      // TODO: improve event handlers
     }
-    if (castPeerId && !castDataConnection && USE_WEBRTC_DATACHANNEL) {
+    if (castPeerId && isConnected(castDataConnection) === false && STREAM_CANVAS === false) {
       castDataConnection = myPeer.connect(castPeerId);
     }
   }
 
   const launch = function () {
-    if (currentSession) {
+    if (currentSession || DEBUG) {
       console.log("running");
 
       if (!canvas) {
@@ -160,6 +165,9 @@
 
       if (game && game.paused === false) {
         game.paused = true;
+      } else if (DEBUG) {
+        initializeGame();
+        game.paused = false;
       }
 
       if (!localStream) {
@@ -167,7 +175,7 @@
       }
       getCastPeerId();
       if (!pingTimer) {
-          pingTimer = setInterval(() => { pingCast(); }, 1000*60);
+          pingTimer = setInterval(() => { pingCast(); }, PING_INTERVAL);
       }
     } else {
       cleanup();
@@ -201,7 +209,9 @@
 
   const initializeGame = () => {
     if (!game) {
-      game = startGame(canvas);
+      game = startGame({canvas, updateCallback: (scene) => {
+          let state = serializeState(scene);
+      }});
       game.paused = true;
     }
     console.log('game:');
@@ -230,6 +240,10 @@
       castDataConnection = null;
     }
   };
+
+  if (DEBUG) {
+    launch();
+  }
 </script>
 <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
 
