@@ -15,31 +15,19 @@
     </section>
   </div>
 </body>
-<script src="js/State.js"></script>
 <script src="js/jquery-1.4.2.min.js"></script>
-<script src="js/dynamicaudio-min.js"></script>
-<script src="js/phaser.min.js"></script>
-<script src="js/breakout.js"></script>
 <script src="js/peerjs.min.js"></script>
 
 <script>
-  // TODO: Config object in seperate file
   const applicationId = 'F1F2B4A5';
   const namespace = 'urn:x-cast:se.patrikkarlsson.cast.snes-cast';
-  const STREAM_CANVAS = true;
-  const WEBRTC_FRAME_RATE = 60;
-  const CANVAS_SIZE = { width: 512, height: 512 };
   const PING_INTERVAL = 1000*60;
   const DEBUG = false;
+  const USE_WEBRTC = false;
 
   let castPeerId;
-  let castMediaConnection;
   let castDataConnection;
   let myPeer;
-  let localStream;
-
-  let canvas;
-  let game; // The phaser instance
 
   let castContext;
   let currentSession;
@@ -49,7 +37,6 @@
     console.log('initializing peer');
     myPeer = new Peer();
     myPeer.on('open', onOpen);
-    myPeer.on('call', onCall);
     myPeer.on('close', onClose);
     myPeer.on('disconnected', onDisconnected);
     myPeer.on('error', onError);
@@ -121,13 +108,6 @@
     }
   };
 
-  const shouldCall = () => {
-    if (!STREAM_CANVAS) {
-      return false;
-    }
-    return castPeerId && !isConnected(castMediaConnection) && localStream;
-  };
-
   const isConnected = (connection) => {
     return connection && connection.open === true;
   }
@@ -135,20 +115,7 @@
   const setCastPeerId = (id) => {
     console.log('Setting castPeerId');
     castPeerId = id;
-
-    if (shouldCall()) {
-      castMediaConnection = myPeer.call(castPeerId, localStream);
-      initializeGame();
-      game.paused = false;
-      const pause = () => {
-        if (game) {
-          game.paused = true;
-        }
-      };
-      castMediaConnection.on('error', pause);
-      castMediaConnection.on('close', pause);
-    }
-    if (castPeerId && isConnected(castDataConnection) === false && STREAM_CANVAS === false) {
+    if (castPeerId && isConnected(castDataConnection) === false && USE_WEBRTC === true) {
       castDataConnection = myPeer.connect(castPeerId);
     }
   }
@@ -157,22 +124,6 @@
     if (currentSession || DEBUG) {
       console.log("running");
 
-      if (!canvas) {
-        canvas = document.createElement('canvas');
-        canvas.width = CANVAS_SIZE.width;
-        canvas.height = CANVAS_SIZE.height;
-      }
-
-      if (game && game.paused === false) {
-        game.paused = true;
-      } else if (DEBUG) {
-        initializeGame();
-        game.paused = false;
-      }
-
-      if (!localStream) {
-        localStream = canvas.captureStream(WEBRTC_FRAME_RATE);
-      }
       getCastPeerId();
       if (!pingTimer) {
           pingTimer = setInterval(() => { pingCast(); }, PING_INTERVAL);
@@ -180,10 +131,6 @@
     } else {
       cleanup();
     }
-  };
-
-  const onCall = (mediaConn) => {
-    console.error("called, we shouldn't be called..");
   };
 
   const onOpen = (id) => {
@@ -207,33 +154,15 @@
     console.log(error);
   };
 
-  const initializeGame = () => {
-    if (!game) {
-      game = startGame({canvas, updateCallback: (scene) => {
-          let state = serializeState(scene);
-      }});
-      game.paused = true;
-    }
-    console.log('game:');
-    console.log(game);
-  };
-
   const cleanup = () => {
     console.log('Cleaning up');
     castPeerId = null;
-    if (game) {
-      game.paused = true;
-    }
     if (pingTimer) {
       clearInterval(pingTimer);
       pingTimer = null;
     }
     if (currentSession) {
       currentSession.removeMessageListener(namespace, onCustomMessage);
-    }
-    if (castMediaConnection) {
-      castMediaConnection.close();
-      castMediaConnection = null;
     }
     if (castDataConnection) {
       castDataConnection.close();
