@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>chromecast-nes</title>
+</head>
+<link rel="stylesheet" type="text/css" href="css/style.css">
+
+<body>
+	<div class="nes-wrapper">
+		<canvas class="nes"></canvas>
+		<video class='video' autoplay width="512px" height="512px"></video>
+	</div>
+</body>
+<script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+<script src="js/peerjs.min.js"></script>
+<script>
+	const namespace = 'urn:x-cast:se.patrikkarlsson.cast.snes-cast';
+	let myPeer;
+	let mainCastSenderId;
+	let remotePeerConnected = false;
+	let mediaConnection;
+	let dataConnection;
+	let video;
+	let canvas;
+	let context;
+	window.onload = function () {
+		const initialize = () => {
+			console.log('setting up canvas');
+			setupCanvas();
+
+			video = document.getElementsByClassName('video')[0];
+
+			console.log('initializing peer');
+			myPeer = new Peer();
+			myPeer.on('open', onOpen);
+			myPeer.on('call', onCall);
+			myPeer.on('connect', onConnect);
+			myPeer.on('close', onClose);
+			myPeer.on('disconnected', onDisconnected);
+			myPeer.on('error', onError);
+			myPeer.connect();
+
+			console.log('initializing cast');
+			const options = new cast.framework.CastReceiverOptions();
+			options.maxInactivity = 3600; // development only
+
+			context = cast.framework.CastReceiverContext.getInstance();
+			
+			context.setLoggerLevel(cast.framework.LoggerLevel.DEBUG);
+			context.addCustomMessageListener(namespace, onCustomMessage);
+
+			context.addEventListener(cast.framework.events.EventType.SENDER_CONNECTED, onSenderConnected);
+			context.addEventListener(cast.framework.events.EventType.READY, onCastReady);
+
+			context.start(options);
+		};
+
+		const onCastReady = (event) => {
+			findLaunchingSenderId();
+		};
+
+		const findLaunchingSenderId = () => {
+			if (!mainCastSenderId && cast.framework.system.launchingSenderId) {
+				mainCastSenderId = cast.framework.system.launchingSenderId;
+				console.log('main cast sender: ' + mainCastSenderId);
+			} else if (!mainCastSenderId) {
+				console.log('unable to find launching sender id');
+			}
+		}
+
+		const onCall = (mediaConn) => {
+			console.log('called!');
+			if (remotePeerConnected === true) {
+				console.error('Getting call when already called?!');
+				return;
+			}
+			remotePeerConnected = true;
+			mediaConnection = mediaConn;
+			mediaConnection.on('stream', (stream) => {
+				remoteStream = stream;
+				video.srcObject = remoteStream;
+			});
+			mediaConnection.answer();
+		};
+
+		const onConnect = (connection) => {
+			if (dataConnection) {
+				dataConnection.close();
+			}
+			dataConnection = connection;
+			dataConnection.on('data', (data) => {
+				console.log('Recieved data!');
+				console.log(data);
+			});
+		};
+
+		const onOpen = (id) => {
+			console.log('Connected to Peer-server with id: ' + id);
+			findLaunchingSenderId();
+			trySendingPeerId();
+		};
+
+		const onClose = () => {
+			console.log('Closed');
+			myPeer.destroy();
+		};
+
+		const onDisconnected = () => {
+			console.log('disconnected');
+			if (!remotePeerConnected) {
+				myPeer.reconnect();
+			}
+		};
+
+		const onError = error => {
+			console.log(error);
+		};
+
+		const onSenderConnected = (event) => {
+			console.log(event);
+			mainCastSenderId = event.senderID;
+			trySendingPeerId();
+		};
+
+		const onSenderDisconnected = (event) => {
+			console.log('sender disconnected');
+			console.log(event);
+			if (mainCastSenderId && event.senderID === mainCastSenderId) {
+				mainCastSenderId = undefined;
+			}
+		}
+
+		const trySendingPeerId = (senderId = undefined) => {
+			console.log('trying to send local peer id');
+			let id = senderId ? senderId : mainCastSenderId;
+			if (myPeer.id && id && context && !remotePeerConnected) {
+				context.sendCustomMessage(namespace, mainCastSenderId, { type: 'castPeerId', peerId: myPeer.id });
+			} else {
+				console.log('Failed to send local peer id...');
+			}
+		};
+
+		const setupCanvas = () => {
+			canvas = document.getElementsByClassName('nes')[0];
+			canvas.width = 256;
+			canvas.height = 240;
+		};
+
+		function onCustomMessage(event) {
+			if (event.data.type == "writeFrame") {
+				var ctx = canvas.getContext('2d')
+				var img = new Image();
+				img.onload = function () {
+					ctx.drawImage(img, 0, 0);
+				}
+				img.src = event.data.frame;
+			} else if (event.data.type == 'sendPeerId') {
+				console.log('Recieved request for sending local peer id from sender with id: ' + event.senderId)
+				trySendingPeerId(event.senderId);
+			} else if (event.data.type == 'ping') {
+				console.log('Got pinged!');
+			}
+		}
+
+		initialize();
+	};
+</script>
+
+</html>

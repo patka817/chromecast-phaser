@@ -1,0 +1,12 @@
+body {
+   background-color: white;
+}
+
+.nes-wrapper {
+   display: flex;
+   flex-direction: column;
+   justify-content: center;
+   align-items: center;
+   width: 90vw;
+   height: 90vh;
+}

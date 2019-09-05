@@ -1,0 +1,236 @@
+<html data-cast-api-enabled="true">
+
+<head>
+  <title>chromecast-nes</title>
+</head>
+<link rel="stylesheet" type="text/css" href="css/style.css">
+
+<body>
+  <div class='center-column-flex'>
+    <section>
+      <h1>Choose casting device</h1>
+      <div style="width: 44px; height: 44px;">
+        <google-cast-launcher></google-cast-launcher>
+      </div>
+    </section>
+  </div>
+</body>
+<script src="js/jquery-1.4.2.min.js"></script>
+<script src="js/dynamicaudio-min.js"></script>
+<script src="js/phaser.min.js"></script>
+<script src="js/breakout.js"></script>
+<script src="js/peerjs.min.js"></script>
+
+<script>
+  const applicationId = 'F1F2B4A5';
+  const namespace = 'urn:x-cast:se.patrikkarlsson.cast.snes-cast';
+  const USE_WEBRTC = true;
+  const USE_WEBRTC_DATACHANNEL = false;
+  const WEBRTC_FRAME_RATE = 60;
+  const OFFSCREEN_RENDERING = true;
+  const CANVAS_SIZE = { width: 512, height: 512 };
+
+  let castPeerId;
+  let castMediaConnection;
+  let castDataConnection;
+  let myPeer;
+  let localStream;
+
+  let canvas;
+  let game; // The phaser instance
+
+  let castContext;
+  let currentSession;
+  let pingTimer;
+  
+  $(function () {
+    console.log('initializing peer');
+    myPeer = new Peer();
+    myPeer.on('open', onOpen);
+    myPeer.on('call', onCall);
+    myPeer.on('close', onClose);
+    myPeer.on('disconnected', onDisconnected);
+    myPeer.on('error', onError);
+    myPeer.connect();
+  });
+
+  window['__onGCastApiAvailable'] = function (isAvailable) {
+    if (isAvailable) {
+      initializeCastApi();
+    }
+  };
+
+  const initializeCastApi = function () {
+    castContext = cast.framework.CastContext.getInstance();
+    cast.framework.setLoggerLevel(cast.framework.LoggerLevel.DEBUG);
+    castContext.setOptions({
+      receiverApplicationId: applicationId,
+      autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+    });
+    castContext.addEventListener(cast.framework.CastContextEventType.CAST_STATE_CHANGED, onCastStateChanged);
+    castContext.addEventListener(cast.framework.CastContextEventType.SESSION_STATE_CHANGED, onSessionStateChanged);
+  };
+
+  const onCastStateChanged = (event) => {
+    console.log(event.data);
+  };
+
+  const onSessionStateChanged = (event) => {
+    console.log(event);
+    if ((event.sessionState === cast.framework.SessionState.SESSION_STARTED || event.sessionState === cast.framework.SessionState.SESSION_RESUMED) && event.session) {
+      console.log('started');
+      currentSession = event.session;
+      currentSession.addMessageListener(namespace, onCustomMessage);
+      launch();
+    } else if (event.sessionState === cast.framework.SessionState.SESSION_START_FAILED) {
+      console.log('failed to start session :(');
+      cleanup();
+    } else if (event.sessionState === cast.framework.SessionState.SESSION_ENDED) {
+      cleanup();
+    }
+  };
+
+  const onCustomMessage = (recievedNameSpace, message) => {
+    if (recievedNameSpace !== namespace) {
+      console.error('unexpected namespace');
+      return;
+    }
+    let parsedMessage = JSON.parse(message);
+    console.log('Recieved message: ' + parsedMessage);
+
+    if (parsedMessage.type == 'castPeerId') {
+        setCastPeerId(parsedMessage.peerId);
+    } else {
+      console.log('unhandled custom message');
+      console.log(message);
+    }
+  };
+
+  const pingCast = () => {
+    if (currentSession) {
+      console.log('Pingin the cast');
+      currentSession.sendMessage(namespace, { type: 'ping' });
+    }
+  };
+
+  const getCastPeerId = () => {
+    if (currentSession) {
+      currentSession.sendMessage(namespace, { type: 'sendPeerId' }); 
+    }
+  };
+
+  const setCastPeerId = (id) => {
+    console.log('Setting castPeerId');
+    castPeerId = id;
+    if (castPeerId && !castMediaConnection && localStream) {
+      castMediaConnection = myPeer.call(castPeerId, localStream);
+      // the event handlers doesn't seem to work .. 
+      initializeGame();
+      game.paused = false;
+      castMediaConnection.on('stream', () => {
+        initializeGame();
+        if (game.paused === true) {
+          game.paused = false;
+        }
+      });
+
+      const pause = () => {
+        if (game) {
+          game.paused = true;
+        }
+      };
+      castMediaConnection.on('error', pause);
+      castMediaConnection.on('close', pause);
+      // TODO: improve event handlers
+    }
+    if (castPeerId && !castDataConnection && USE_WEBRTC_DATACHANNEL) {
+      castDataConnection = myPeer.connect(castPeerId);
+    }
+  }
+
+  const launch = function () {
+    if (currentSession) {
+      console.log("running");
+
+      if (!canvas) {
+        canvas = document.createElement('canvas');
+        canvas.width = CANVAS_SIZE.width;
+        canvas.height = CANVAS_SIZE.height;
+      }
+
+      if (game && game.paused === false) {
+        game.paused = true;
+      }
+
+      if (!localStream) {
+        localStream = canvas.captureStream(WEBRTC_FRAME_RATE);
+      }
+      getCastPeerId();
+      if (!pingTimer) {
+          pingTimer = setInterval(() => { pingCast(); }, 1000*60);
+      }
+    } else {
+      cleanup();
+    }
+  };
+
+  const onCall = (mediaConn) => {
+    console.error("called, we shouldn't be called..");
+  };
+
+  const onOpen = (id) => {
+    console.log('Connected to Peer-server with id: ' + id);
+  };
+
+  const onClose = () => {
+    console.log('Closed');
+    cleanup();
+    myPeer.destroy();
+  };
+
+  const onDisconnected = () => {
+    console.log('disconnected');
+    if (!castPeerId) {
+      myPeer.reconnect();
+    }
+  };
+
+  const onError = error => {
+    console.log(error);
+  };
+
+  const initializeGame = () => {
+    if (!game) {
+      game = startGame(canvas);
+      game.paused = true;
+    }
+    console.log('game:');
+    console.log(game);
+  };
+
+  const cleanup = () => {
+    console.log('Cleaning up');
+    castPeerId = null;
+    if (game) {
+      game.paused = true;
+    }
+    if (pingTimer) {
+      clearInterval(pingTimer);
+      pingTimer = null;
+    }
+    if (currentSession) {
+      currentSession.removeMessageListener(namespace, onCustomMessage);
+    }
+    if (castMediaConnection) {
+      castMediaConnection.close();
+      castMediaConnection = null;
+    }
+    if (castDataConnection) {
+      castDataConnection.close();
+      castDataConnection = null;
+    }
+  };
+</script>
+<script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+
+</html>
