@@ -8,37 +8,33 @@
 
 <body>
 	<div id="nes-wrapper" class="nes-wrapper">
-		<canvas id="nes" class="nes"></canvas>
 	</div>
 </body>
 <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
 <script src="js/peerjs.min.js"></script>
 <script src="js/phaser.min.js"></script>
+<script src="js/gameinput.js"></script>
 <script src="js/game.js"></script>
 <script>
 	const namespace = 'urn:x-cast:se.patrikkarlsson.cast.snes-cast';
 	let myPeer;
 	let mainCastSenderId;
 	let remotePeerConnected = false;
-	let mediaConnection;
 	let dataConnection;
-	let video;
-	let canvas;
 	let context;
 	let game;
+	let gameInput = new GameInput();
+	let parent = document.getElementsByClassName('nes-wrapper')[0];
 
 	window.onload = function () {
 		const initialize = () => {
-			console.log('setting up canvas');
-			setupCanvas();
-
-			video = document.getElementsByClassName('video')[0];
-
 			console.log('initializing peer');
 			myPeer = new Peer();
 			myPeer.on('open', onOpen);
-			myPeer.on('call', onCall);
-			myPeer.on('connect', onConnect);
+			myPeer.on('call', () => {
+				console.log('We should not be called!');
+			});
+			myPeer.on('connection', onConnect);
 			myPeer.on('close', onClose);
 			myPeer.on('disconnected', onDisconnected);
 			myPeer.on('error', onError);
@@ -46,7 +42,7 @@
 
 			console.log('initializing cast');
 			const options = new cast.framework.CastReceiverOptions();
-			options.maxInactivity = 3600; // development only
+			options.disableIdleTimeout = true;
 
 			context = cast.framework.CastReceiverContext.getInstance();
 			
@@ -57,12 +53,11 @@
 			context.addEventListener(cast.framework.events.EventType.READY, onCastReady);
 
 			context.start(options);
-			game = startGame(); // TODO: remove
+			game = startGame(gameInput, parent);
 		};
 
 		const onCastReady = (event) => {
 			findLaunchingSenderId();
-			game = startGame();
 		};
 
 		const findLaunchingSenderId = () => {
@@ -74,29 +69,16 @@
 			}
 		}
 
-		const onCall = (mediaConn) => {
-			console.log('called!');
-			if (remotePeerConnected === true) {
-				console.error('Getting call when already called?!');
-				return;
-			}
-			remotePeerConnected = true;
-			mediaConnection = mediaConn;
-			mediaConnection.on('stream', (stream) => {
-				remoteStream = stream;
-				video.srcObject = remoteStream;
-			});
-			mediaConnection.answer();
-		};
-
 		const onConnect = (connection) => {
 			if (dataConnection) {
 				dataConnection.close();
 			}
 			dataConnection = connection;
 			dataConnection.on('data', (data) => {
+				const parsed = JSON.parse(data);
 				console.log('Recieved data!');
-				console.log(data);
+				console.log(parsed);
+				onButtonDataMessage(parsed);
 			});
 		};
 
@@ -146,25 +128,22 @@
 			}
 		};
 
-		const setupCanvas = () => {
-			canvas = document.getElementsByClassName('nes')[0];
-			canvas.width = 256;
-			canvas.height = 240;
-		};
-
 		function onCustomMessage(event) {
-			if (event.data.type == "writeFrame") {
-				var ctx = canvas.getContext('2d')
-				var img = new Image();
-				img.onload = function () {
-					ctx.drawImage(img, 0, 0);
-				}
-				img.src = event.data.frame;
-			} else if (event.data.type == 'sendPeerId') {
+			if (event.data.type == 'sendPeerId') {
 				console.log('Recieved request for sending local peer id from sender with id: ' + event.senderId)
 				trySendingPeerId(event.senderId);
 			} else if (event.data.type == 'ping') {
 				console.log('Got pinged!');
+			} else if (event.data.type === 'b') {
+				onButtonDataMessage(event.data);
+			}
+		}
+
+		const onButtonDataMessage = (message) => {
+			if (message.b === 'L') {
+				gameInput.setLeftIsDown(message.a === 'D');
+			} else if (message.b === 'R') {
+				gameInput.setRightIsDown(message.a === 'D');
 			}
 		}
 

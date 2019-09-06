@@ -13,17 +13,21 @@
         <google-cast-launcher></google-cast-launcher>
       </div>
     </section>
+    <section class='buttonContainer'>
+      <div class='left'></div>
+      <div class='right'></div>
+    </section>
   </div>
 </body>
 <script src="js/jquery-1.4.2.min.js"></script>
 <script src="js/peerjs.min.js"></script>
-
+<script src="js/gamepad.js"></script>
 <script>
   const applicationId = 'F1F2B4A5';
   const namespace = 'urn:x-cast:se.patrikkarlsson.cast.snes-cast';
   const PING_INTERVAL = 1000*60;
   const DEBUG = false;
-  const USE_WEBRTC = false;
+  const USE_WEBRTC = true;
 
   let castPeerId;
   let castDataConnection;
@@ -32,6 +36,8 @@
   let castContext;
   let currentSession;
   let pingTimer;
+
+  let gamepad;
   
   $(function () {
     console.log('initializing peer');
@@ -41,6 +47,14 @@
     myPeer.on('disconnected', onDisconnected);
     myPeer.on('error', onError);
     myPeer.connect();
+
+    const left = document.getElementsByClassName('left')[0];
+    const right = document.getElementsByClassName('right')[0];
+    gamepad = new GamePad(left, right, (ac, buttonCode) => {
+      console.log('buttonaction: ' + ac + ' for ' + buttonCode);
+      sendButtonMessage(ac, buttonCode);
+    });
+    gamepad.disabled = true;
   });
 
   window['__onGCastApiAvailable'] = function (isAvailable) {
@@ -95,6 +109,32 @@
     }
   };
 
+  let lastAlert;
+  const showConnectAlert = () => {
+    if (!lastAlert || (lastAlert && ((new Date()).getTime() - lastAlert.getTime() > 1000*5))) {
+      lastAlert = new Date();
+      alert('Connect to the chromecast to be able to play');
+    }
+  };
+
+  const sendButtonMessage = (action, button) => {
+    let payload = {type: 'b', a: action, b: button };
+    
+    if (USE_WEBRTC) {
+      if (isConnected(castDataConnection)) {
+          castDataConnection.send(JSON.stringify(payload))
+      } else if (currentSession) {
+        console.error('Failed to send button message, not connected with webrtc');
+      } else {
+        showConnectAlert();
+      }
+    } else if (currentSession) {
+      currentSession.sendMessage(namespace, payload);
+    } else {
+      showConnectAlert();
+    }
+  }
+
   const pingCast = () => {
     if (currentSession) {
       console.log('Pingin the cast');
@@ -109,21 +149,28 @@
   };
 
   const isConnected = (connection) => {
-    return connection && connection.open === true;
+    if (connection === undefined || connection === null) {
+      return false;
+    }
+    return connection.open === true;
   }
 
   const setCastPeerId = (id) => {
     console.log('Setting castPeerId');
     castPeerId = id;
     if (castPeerId && isConnected(castDataConnection) === false && USE_WEBRTC === true) {
+      console.log('USING WEBRTC');
       castDataConnection = myPeer.connect(castPeerId);
+      gamepad.disabled = false;
     }
   }
 
   const launch = function () {
     if (currentSession || DEBUG) {
       console.log("running");
-
+      if (USE_WEBRTC === false) {
+        gamepad.disabled = false;
+      }
       getCastPeerId();
       if (!pingTimer) {
           pingTimer = setInterval(() => { pingCast(); }, PING_INTERVAL);
@@ -168,6 +215,7 @@
       castDataConnection.close();
       castDataConnection = null;
     }
+    gamepad.disabled = true;
   };
 
   if (DEBUG) {

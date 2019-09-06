@@ -1,19 +1,11 @@
-const deserializeState = (state) => {
-
-};
-
-const makeBreakoutScene = (updateCallback) => {
-    updateCallback = updateCallback || (() => { });
+const makeBreakoutScene = (gameInput) => {
     var Breakout = new Phaser.Class({
 
         Extends: Phaser.Scene,
     
-        initialize:
-    
-        function Breakout ()
+        initialize: function () //Breakout ()
         {
             Phaser.Scene.call(this, { key: 'breakout' });
-    
             this.bricks;
             this.paddle;
             this.ball;
@@ -26,30 +18,41 @@ const makeBreakoutScene = (updateCallback) => {
     
         create: function ()
         {
+            //let { width, height } = this.sys.game.canvas;
+            this.gameWidth = this.cameras.main.width;
+            this.gameHeigth = this.cameras.main.height;
+            this.paddleVelocity = this.gameWidth/1.5; // make sure it takes approx. 1.5sec to move from side to side
+            
             //  Enable world bounds, but disable the floor
             this.physics.world.setBoundsCollision(true, true, true, false);
     
             //  Create the bricks in a 10x6 grid
+            let startX = (this.gameWidth - 10*64)/2 + 32; // center the grid by getting full width of the grid, get the 'rest'-space(by subtracting from gameWidth) and take the cellWidth/2 into account
             this.bricks = this.physics.add.staticGroup({
                 key: 'assets', frame: [ 'blue1', 'red1', 'green1', 'yellow1', 'silver1', 'purple1' ],
                 frameQuantity: 10,
-                gridAlign: { width: 10, height: 6, cellWidth: 64, cellHeight: 32, x: 112, y: 100 }
+                gridAlign: { width: 10, height: 6, cellWidth: 64, cellHeight: 32, x: startX, y: 100 }
             });
-    
-            this.ball = this.physics.add.image(400, 500, 'assets', 'ball1').setCollideWorldBounds(true).setBounce(1);
+            const paddleBottomMargin = this.gameHeigth*0.1;
+            this.paddle = this.physics.add.image(this.gameWidth/2, this.gameHeigth - paddleBottomMargin, 'assets', 'paddle1').setCollideWorldBounds(true).setImmovable();
+
+            const ballYPos = this.paddle.y - 44; // 44 == ball-size * 2 ...
+            this.ball = this.physics.add.image(this.gameWidth/2, ballYPos, 'assets', 'ball1').setCollideWorldBounds(true).setBounce(1);
             this.ball.setData('onPaddle', true);
     
-            this.paddle = this.physics.add.image(400, 550, 'assets', 'paddle1').setImmovable();
     
             //  Our colliders
             this.physics.add.collider(this.ball, this.bricks, this.hitBrick, null, this);
             this.physics.add.collider(this.ball, this.paddle, this.hitPaddle, null, this);
+
+            this.paddleXUpperLimit = this.gameWidth - this.paddle.width/2;
+            this.paddleXLowerLimit = this.paddle.width/2;
     
             //  Input events
             this.input.on('pointermove', function (pointer) {
     
                 //  Keep the paddle within the game
-                this.paddle.x = Phaser.Math.Clamp(pointer.x, 52, 748);
+                this.paddle.x = Phaser.Math.Clamp(pointer.x, this.paddleXLowerLimit, this.paddleXUpperLimit);
     
                 if (this.ball.getData('onPaddle'))
                 {
@@ -58,18 +61,18 @@ const makeBreakoutScene = (updateCallback) => {
     
             }, this);
     
-            this.input.on('pointerup', function (pointer) {
-    
-                if (this.ball.getData('onPaddle'))
-                {
-                    this.ball.setVelocity(-75, -300);
-                    this.ball.setData('onPaddle', false);
-                }
-    
-            }, this);
+            this.input.on('pointerup', this.startBall, this);
+        },
+
+        startBall: function() {
+            if (this.ball.getData('onPaddle'))
+            {
+                this.ball.setVelocity(-75, -300);
+                this.ball.setData('onPaddle', false);
+            }
         },
     
-        hitBrick: function (ball, brick)
+        hitBrick: function(ball, brick)
         {
             brick.disableBody(true, true);
     
@@ -82,7 +85,7 @@ const makeBreakoutScene = (updateCallback) => {
         resetBall: function ()
         {
             this.ball.setVelocity(0);
-            this.ball.setPosition(this.paddle.x, 500);
+            this.ball.setPosition(this.paddle.x - this.ball.width/2, this.paddle.y - this.ball.height*2);
             this.ball.setData('onPaddle', true);
         },
     
@@ -122,31 +125,45 @@ const makeBreakoutScene = (updateCallback) => {
         },
     
         update: function ()
-        {
-            if (this.ball.y > 600)
+        {              
+            if (this.ball.y > this.gameHeigth)
             {
                 this.resetBall();
             }
-            updateCallback(this);
+
+            if (Breakout.gameInput.left.isDown) {
+                this.startBall();
+                this.paddle.setVelocityX(-this.paddleVelocity);
+            } else if (Breakout.gameInput.right.isDown) {
+                this.startBall();
+                this.paddle.setVelocityX(this.paddleVelocity);
+            } else {
+                this.paddle.setVelocityX(0);
+            }
         }
     
     });
-
+    Breakout.gameInput = gameInput;
     return Breakout;
 };
 
 var config = {
     type: Phaser.AUTO,
-    width: 800,
-    height: 600,
-    parent: 'nes-wrapper',
+    gameTitle: 'Cast Breakout!',
+    expandParent: false,
+    domCreateContainer: true,
     physics: {
         default: 'arcade'
-    }
+    },
+    scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH
+    },
 };
 // TODO: allow overriden config params
-const startGame = () => {
-    config.scene = makeBreakoutScene();
+const startGame = (gameInput, parent) => {
+    config.scene = makeBreakoutScene(gameInput);
+    config.parent = parent;
     var game = new Phaser.Game(config);
     return game;
 }

@@ -1,3 +1,19 @@
 body {
    background-color: white;
 }
+
+.buttonContainer {
+   position: absolute;
+   bottom: 25px;
+   left: 0px;
+   width: 100vw;
+   display: flex;
+   justify-content: space-around;
+}
+
+.buttonContainer > div {
+   background-color: aqua;
+   min-width: calc(100vw/3);
+   text-align: center;
+   min-height: 50px;
+}
