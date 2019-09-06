@@ -25,7 +25,6 @@
 <script>
   const applicationId = 'F1F2B4A5';
   const namespace = 'urn:x-cast:se.patrikkarlsson.cast.snes-cast';
-  const PING_INTERVAL = 1000*60;
   const DEBUG = false;
   const USE_WEBRTC = true;
 
@@ -35,7 +34,6 @@
 
   let castContext;
   let currentSession;
-  let pingTimer;
 
   let gamepad;
   
@@ -51,7 +49,6 @@
     const left = document.getElementsByClassName('left')[0];
     const right = document.getElementsByClassName('right')[0];
     gamepad = new GamePad(left, right, (ac, buttonCode) => {
-      console.log('buttonaction: ' + ac + ' for ' + buttonCode);
       sendButtonMessage(ac, buttonCode);
     });
     gamepad.disabled = true;
@@ -135,13 +132,6 @@
     }
   }
 
-  const pingCast = () => {
-    if (currentSession) {
-      console.log('Pingin the cast');
-      currentSession.sendMessage(namespace, { type: 'ping' });
-    }
-  };
-
   const getCastPeerId = () => {
     if (currentSession) {
       currentSession.sendMessage(namespace, { type: 'sendPeerId' }); 
@@ -172,9 +162,6 @@
         gamepad.disabled = false;
       }
       getCastPeerId();
-      if (!pingTimer) {
-          pingTimer = setInterval(() => { pingCast(); }, PING_INTERVAL);
-      }
     } else {
       cleanup();
     }
@@ -204,10 +191,6 @@
   const cleanup = () => {
     console.log('Cleaning up');
     castPeerId = null;
-    if (pingTimer) {
-      clearInterval(pingTimer);
-      pingTimer = null;
-    }
     if (currentSession) {
       currentSession.removeMessageListener(namespace, onCustomMessage);
     }

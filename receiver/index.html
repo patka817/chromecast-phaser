@@ -76,8 +76,8 @@
 			dataConnection = connection;
 			dataConnection.on('data', (data) => {
 				const parsed = JSON.parse(data);
-				console.log('Recieved data!');
-				console.log(parsed);
+				//console.log('Recieved data!');
+				//console.log(parsed);
 				onButtonDataMessage(parsed);
 			});
 		};
