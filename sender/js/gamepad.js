@@ -6,14 +6,12 @@ const BUTTON_ACTION_UP = 'U';
 const LEFT_ARROW_KEY = 37;
 const RIGHT_ARROW_KEY = 39;
 
-class GamePad {
+class GamePad extends GameInput {
 	leftButtonCode = 'L';
 	rightButtonCode = 'R';
 
-	leftIsPressed = false;
-	rightIsPressed = false;
-
 	constructor(leftButtonElement, rightButtonElement, sendButtonMessage) {
+		super();
 		leftButtonElement.addEventListener('touchstart', this.onLeftButtonDown);
 		leftButtonElement.addEventListener('mousedown', this.onLeftButtonDown);
 		leftButtonElement.addEventListener('touchend', this.onLeftButtonUp);
@@ -42,8 +40,8 @@ class GamePad {
 	set disabled(value) {
 		if (value !== this._disabled) {
 			this._disabled = value;
-			this.leftIsPressed = false;
-			this.rightIsPressed = false;
+			this.setLeftIsDown(false);
+			this.setRightIsDown(false);
 		}
 	}
 
@@ -59,25 +57,25 @@ class GamePad {
 	};
 
 	onLeftButtonDown = (e) => {
-		this.leftIsPressed = true;
+		this.setLeftIsDown(true);
 		this.onButtonAction(e, BUTTON_ACTION_DOWN, this.leftButtonCode);
 	};
 
 	onLeftButtonUp = (e) => {
-		if (this.leftIsPressed) {
-			this.leftIsPressed = false;
+		if (this.left.isDown) {
+			this.setLeftIsDown(false);
 			this.onButtonAction(e, BUTTON_ACTION_UP, this.leftButtonCode);
 		}
 	}
 
 	onRightButtonDown = (e) => {
-		this.rightIsPressed = true;
+		this.setRightIsDown(true);
 		this.onButtonAction(e, BUTTON_ACTION_DOWN, this.rightButtonCode);
 	};
 
 	onRightButtonUp = (e) => {
-		if (this.rightIsPressed) {
-			this.rightIsPressed = false;
+		if (this.right.isDown) {
+			this.setRightIsDown(false);
 			this.onButtonAction(e, BUTTON_ACTION_UP, this.rightButtonCode);
 		}
 	}

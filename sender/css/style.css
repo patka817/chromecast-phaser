@@ -15,5 +15,5 @@ body {
    background-color: aqua;
    min-width: calc(100vw/3);
    text-align: center;
-   min-height: 50px;
+   min-height: 150px;
 }

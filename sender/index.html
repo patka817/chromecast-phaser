@@ -21,12 +21,18 @@
 </body>
 <script src="js/jquery-1.4.2.min.js"></script>
 <script src="js/peerjs.min.js"></script>
+<script src="js/phaser.min.js"></script>
+<script src="js/gameinput.js"></script>
 <script src="js/gamepad.js"></script>
+<script src="js/phaserRenderStateManager.js"></script>
+<script src="js/game.js"></script>
 <script>
   const applicationId = 'F1F2B4A5';
   const namespace = 'urn:x-cast:se.patrikkarlsson.cast.snes-cast';
   const DEBUG = false;
-  const USE_WEBRTC = true;
+  const USE_WEBRTC = false;
+
+  let isHost = true;
 
   let castPeerId;
   let castDataConnection;
@@ -36,6 +42,8 @@
   let currentSession;
 
   let gamepad;
+  let headlessGame;
+  let renderStateManager;
   
   $(function () {
     console.log('initializing peer');
@@ -49,7 +57,9 @@
     const left = document.getElementsByClassName('left')[0];
     const right = document.getElementsByClassName('right')[0];
     gamepad = new GamePad(left, right, (ac, buttonCode) => {
-      sendButtonMessage(ac, buttonCode);
+      if (!isHost) {
+        sendButtonMessage(ac, buttonCode);
+      }
     });
     gamepad.disabled = true;
   });
@@ -116,21 +126,31 @@
 
   const sendButtonMessage = (action, button) => {
     let payload = {type: 'b', a: action, b: button };
-    
+    sendCastMessage(payload);
+  }
+
+  const sendGameStateMessage = (gameDTOs) => {
+    let state = { type: 'GS', o: gameDTOs };
+      sendCastMessage(state);
+  };
+
+  const sendCastMessage = (payload) => {
     if (USE_WEBRTC) {
       if (isConnected(castDataConnection)) {
           castDataConnection.send(JSON.stringify(payload))
       } else if (currentSession) {
-        console.error('Failed to send button message, not connected with webrtc');
+        // ???! TODO:
       } else {
         showConnectAlert();
       }
     } else if (currentSession) {
-      currentSession.sendMessage(namespace, payload);
+      currentSession.sendMessage(namespace, payload).catch(error => {
+        console.log(error);
+      });
     } else {
       showConnectAlert();
     }
-  }
+  };
 
   const getCastPeerId = () => {
     if (currentSession) {
@@ -151,6 +171,7 @@
     if (castPeerId && isConnected(castDataConnection) === false && USE_WEBRTC === true) {
       console.log('USING WEBRTC');
       castDataConnection = myPeer.connect(castPeerId);
+      initializeGame();
       gamepad.disabled = false;
     }
   }
@@ -160,11 +181,26 @@
       console.log("running");
       if (USE_WEBRTC === false) {
         gamepad.disabled = false;
+        if (initializeGame() === false && renderStateManager) {
+            renderStateManager.sendInitializeState();
+        }
       }
       getCastPeerId();
     } else {
       cleanup();
     }
+  };
+
+  const initializeGame = () => {
+    if (headlessGame) {
+      return false;
+    }
+    renderStateManager = new PhaserRenderStateManager();
+    renderStateManager.onStateChanged((delta) => {
+        sendGameStateMessage(delta);
+    });
+    headlessGame = startGame(gamepad, renderStateManager);
+    return true;
   };
 
   const onOpen = (id) => {
@@ -193,6 +229,7 @@
     castPeerId = null;
     if (currentSession) {
       currentSession.removeMessageListener(namespace, onCustomMessage);
+      currentSession = null;
     }
     if (castDataConnection) {
       castDataConnection.close();

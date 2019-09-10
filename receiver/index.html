@@ -14,6 +14,7 @@
 <script src="js/peerjs.min.js"></script>
 <script src="js/phaser.min.js"></script>
 <script src="js/gameinput.js"></script>
+<script src="js/syncableScene.js"></script>
 <script src="js/game.js"></script>
 <script>
 	const namespace = 'urn:x-cast:se.patrikkarlsson.cast.snes-cast';
@@ -25,6 +26,7 @@
 	let game;
 	let gameInput = new GameInput();
 	let parent = document.getElementsByClassName('nes-wrapper')[0];
+	let sceneUpdater;
 
 	window.onload = function () {
 		const initialize = () => {
@@ -54,6 +56,7 @@
 
 			context.start(options);
 			game = startGame(gameInput, parent);
+			sceneUpdater = new PhaserRenderStateSceneUpdater(game);
 		};
 
 		const onCastReady = (event) => {
@@ -76,9 +79,12 @@
 			dataConnection = connection;
 			dataConnection.on('data', (data) => {
 				const parsed = JSON.parse(data);
-				//console.log('Recieved data!');
-				//console.log(parsed);
-				onButtonDataMessage(parsed);
+				
+				if (parsed.type === 'b') {
+					onButtonDataMessage(parsed);
+				} else if (parsed.type === 'GS') {
+					onGameStateMessage(parsed.o);
+				}
 			});
 		};
 
@@ -136,6 +142,8 @@
 				console.log('Got pinged!');
 			} else if (event.data.type === 'b') {
 				onButtonDataMessage(event.data);
+			} else if (event.data.type === 'GS') {
+				onGameStateMessage(event.data.o)
 			}
 		}
 
@@ -145,7 +153,11 @@
 			} else if (message.b === 'R') {
 				gameInput.setRightIsDown(message.a === 'D');
 			}
-		}
+		};
+
+		const onGameStateMessage = (objects) => {
+			sceneUpdater.renderStateObjects(objects);
+		};
 
 		initialize();
 	};
