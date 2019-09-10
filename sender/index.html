@@ -30,9 +30,9 @@
   const applicationId = 'F1F2B4A5';
   const namespace = 'urn:x-cast:se.patrikkarlsson.cast.snes-cast';
   const DEBUG = false;
-  const USE_WEBRTC = false;
+  const USE_WEBRTC = false; // broken w.r.t pause/resume
 
-  let isHost = true;
+  let isHost = true; // kinda not used...
 
   let castPeerId;
   let castDataConnection;
@@ -183,6 +183,7 @@
         gamepad.disabled = false;
         if (initializeGame() === false && renderStateManager) {
             renderStateManager.sendInitializeState();
+            resumeGame();
         }
       }
       getCastPeerId();
@@ -235,7 +236,20 @@
       castDataConnection.close();
       castDataConnection = null;
     }
+    pauseGame();
     gamepad.disabled = true;
+  };
+
+  const pauseGame = () => {
+    if (headlessGame) {
+      headlessGame.scene.sleep('breakout');
+    }
+  };
+
+  const resumeGame = () => {
+    if (headlessGame) {
+      headlessGame.scene.wake('breakout');
+    }
   };
 
   if (DEBUG) {

@@ -8,11 +8,11 @@ class PhaserRenderStateManager {
     }
 
     spriteState() {
-        return this._spriteState.values();
+        return [...this._spriteState.values()];
     }
 
     sendInitializeState() {
-        if (this._spriteState.length > 0) {
+        if (this._spriteState.size > 0) {
             this._onStateChanged(this.spriteState().map(dto => { return { a: 'A', ...dto }}));
         }
     }

@@ -1,6 +1,6 @@
 class SyncableScene extends Phaser.Scene {
     objects = [];
-    isLoaded = false;
+    isLoaded = new Observable(false);
 
     renderObjects = (newObjects) => {
         // dumb update. Can be improved by enforcing id.. 
@@ -24,7 +24,7 @@ class SyncableScene extends Phaser.Scene {
     };
 
     create() {
-        this.isLoaded = true;
+        this.isLoaded.value = true;
     }
 }
 
@@ -37,14 +37,14 @@ class PhaserRenderStateSceneUpdater {
 
     renderStateObjects(renderDTOs) {
         const activeScene = game.scene.scenes[0];
-        if (activeScene.isLoaded === false) {
+        if (!activeScene || activeScene.scene.isActive() === false) {
             renderDTOs.forEach(dto => this.dtosToRender.set(dto.id, dto));
             return;
         }
-        if (this.dtosToRender.length > 0) {
+        if (this.dtosToRender.size > 0) {
             renderDTOs.forEach(dto => this.dtosToRender.set(dto.id, dto));
-            renderDTOs = this.dtosToRender.values();
-            this.dtosToRender = [];
+            renderDTOs = [...this.dtosToRender.values()];
+            this.dtosToRender.clear();
         }
         renderDTOs.forEach(dto => {
             let object = this.objects.get(dto.id);
