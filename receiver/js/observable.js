@@ -17,7 +17,7 @@ class Observable {
         return this._value;
     }
 
-    onValueChanged(callback) {
+    onValueChanged = (callback) => {
         this._observers.push(callback);
     }
 }

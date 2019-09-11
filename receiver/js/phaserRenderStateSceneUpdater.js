@@ -1,44 +1,35 @@
-class SyncableScene extends Phaser.Scene {
-    objects = [];
-    isLoaded = new Observable(false);
-
-    renderObjects = (newObjects) => {
-        // dumb update. Can be improved by enforcing id.. 
-        this.objects.forEach(el => el.destroy() );
-        // TODO: Handle text
-        this.objects = newObjects.map(({x, y, scale, tint, skin, angle}) => {
-            let newObj = this.add.image(x, y, skin);
-            if (scale && typeof scale === 'number') {
-                newObj.setScale(scale);
-            } else if (scale) {
-                newObj.setScale(scale.x, scale.y);
-            }
-            if (tint) {
-                newObj.setTint(tint);
-            }
-            if (angle) {
-                newObj.angle = angle;
-            }
-            return newObj;
-        });
-    };
-
-    create() {
-        this.isLoaded.value = true;
-    }
-}
-
 class PhaserRenderStateSceneUpdater {
+    // TODO: connect to scene by scene-key?!
     constructor(game) {
         this.game = game;
         this.objects = new Map();
         this.dtosToRender = new Map();
+        this.polling = false;
     }
 
-    renderStateObjects(renderDTOs) {
-        const activeScene = game.scene.scenes[0];
-        if (!activeScene || activeScene.scene.isActive() === false) {
+    startPollingForActiveScene = () => {
+        if (this.polling) {
+            return;
+        }
+        this.polling = true;
+        setTimeout(this.pollActiveScene, 250);
+    }
+
+    pollActiveScene = () => {
+        this.polling = false;
+        this.renderStateObjects([]);
+    }
+
+    getActiveScene = () => {
+        const scene = game.scene.scenes[0];
+        return (scene && scene.scene.isActive() === true) ? scene : null;
+    }
+
+    renderStateObjects = (renderDTOs) => {
+        const activeScene = this.getActiveScene();
+        if (!activeScene || this.polling) {
             renderDTOs.forEach(dto => this.dtosToRender.set(dto.id, dto));
+            this.startPollingForActiveScene();
             return;
         }
         if (this.dtosToRender.size > 0) {
@@ -66,7 +57,7 @@ class PhaserRenderStateSceneUpdater {
         });
     }
 
-    setTintAngleScale(obj, {tint, scale, angle }) {
+    setTintAngleScale = (obj, {tint, scale, angle }) => {
         if (scale && typeof scale === 'number') {
             obj.setScale(scale);
         } else if (scale) {

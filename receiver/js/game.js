@@ -1,4 +1,4 @@
-class Breakout extends SyncableScene {
+class Breakout extends Phaser.Scene {
     initialize = function () {
             Phaser.Scene.call(this, { key: 'breakout' });
         }

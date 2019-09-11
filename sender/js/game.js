@@ -51,6 +51,7 @@ class Breakout extends Phaser.Scene {
         });
         const paddleBottomMargin = this.gameHeigth*0.1;
         this.paddle = this.physics.add.image(this.gameWidth/2, this.gameHeigth - paddleBottomMargin, 'assets', 'paddle1').setCollideWorldBounds(true).setImmovable();
+        //this.paddle.scaleX = 2;
         this.paddle.id = 'paddle';
 
         const ballYPos = this.paddle.y - 44; // 44 == ball-size * 2 ...
