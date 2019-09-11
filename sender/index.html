@@ -1,7 +1,7 @@
 <html data-cast-api-enabled="true">
 
 <head>
-  <title>chromecast-nes</title>
+  <title>chromecast-Breakout</title>
 </head>
 <link rel="stylesheet" type="text/css" href="css/style.css">
 
@@ -24,6 +24,7 @@
 <script src="js/jquery-1.4.2.min.js"></script>
 <script src="js/peerjs.min.js"></script>
 <script src="js/phaser.min.js"></script>
+<script src="js/latencyChecker.js"></script>
 <script src="js/gameinput.js"></script>
 <script src="js/gamepad.js"></script>
 <script src="js/phaserRenderStateManager.js"></script>
@@ -32,7 +33,7 @@
   const applicationId = 'F1F2B4A5';
   const namespace = 'urn:x-cast:se.patrikkarlsson.cast.snes-cast';
   const DEBUG = false;
-  const USE_WEBRTC = false; // broken w.r.t pause/resume
+  const USE_WEBRTC = false;
 
   let isHost = true; // kinda not used...
 
@@ -46,6 +47,7 @@
   let gamepad;
   let headlessGame;
   let renderStateManager;
+  let latencyChecker = new LatencyChecker();
   
   $(function () {
     console.log('initializing peer');
@@ -124,6 +126,8 @@
 
     if (parsedMessage.type == 'castPeerId') {
         setCastPeerId(parsedMessage.peerId);
+    } else if (parsedMessage.type === 'LC') {
+      latencyChecker.onRecievedAnswer(parsedMessage);
     } else {
       console.log('unhandled custom message');
       console.log(message);
@@ -185,8 +189,15 @@
     if (castPeerId && isConnected(castDataConnection) === false && USE_WEBRTC === true) {
       console.log('USING WEBRTC');
       castDataConnection = myPeer.connect(castPeerId);
-      initializeGame();
-      gamepad.disabled = false;
+      castDataConnection.on('open', onCommunicationChannelOpen);
+      castDataConnection.on('data', (json) => {
+          let parsed = JSON.parse(json);
+          if (parsed.type === 'LC') {
+            latencyChecker.onRecievedAnswer(parsed);
+          } else {
+            console.log('unknown data sent over WebRTC: ' + json);
+          }
+      });
     }
   }
 
@@ -194,16 +205,28 @@
     if (currentSession || DEBUG) {
       console.log("running");
       if (USE_WEBRTC === false) {
-        gamepad.disabled = false;
-        if (initializeGame() === false && renderStateManager) {
-            renderStateManager.sendInitializeState();
-            resumeGame();
-        }
+        onCommunicationChannelOpen();
+      } else {
+        getCastPeerId();
       }
-      getCastPeerId();
     } else {
       cleanup();
     }
+  };
+
+  const onCommunicationChannelOpen = () => {
+    gamepad.disabled = false;
+    if (initializeGame() === false && renderStateManager) {
+      renderStateManager.sendInitializeState();
+      resumeGame();
+    }
+    startCheckingLatency();
+  };
+
+  const startCheckingLatency = () => {
+    latencyChecker.startChecking((payload) => {
+      sendCastMessage({ ...payload, type: 'LC'});
+    });
   };
 
   const initializeGame = () => {
@@ -242,6 +265,8 @@
   const cleanup = () => {
     console.log('Cleaning up');
     castPeerId = null;
+    latencyChecker.stopChecking();
+    pauseGame();
     if (currentSession) {
       currentSession.removeMessageListener(namespace, onCustomMessage);
       currentSession = null;
@@ -250,7 +275,6 @@
       castDataConnection.close();
       castDataConnection = null;
     }
-    pauseGame();
     gamepad.disabled = true;
   };
 

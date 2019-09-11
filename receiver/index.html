@@ -85,6 +85,8 @@
 					onButtonDataMessage(parsed);
 				} else if (parsed.type === 'GS') {
 					onGameStateMessage(parsed.o);
+				} else if (parsed.type === 'LC') {
+					dataConnection.send(data);
 				}
 			});
 		};
@@ -127,9 +129,8 @@
 
 		const trySendingPeerId = (senderId = undefined) => {
 			console.log('trying to send local peer id');
-			let id = senderId ? senderId : mainCastSenderId;
-			if (myPeer.id && id && context && !remotePeerConnected) {
-				context.sendCustomMessage(namespace, mainCastSenderId, { type: 'castPeerId', peerId: myPeer.id });
+			if (myPeer.id && !remotePeerConnected) {
+				sendCustomMessage({ type: 'castPeerId', peerId: myPeer.id }, senderId);
 			} else {
 				console.log('Failed to send local peer id...');
 			}
@@ -145,8 +146,17 @@
 				onButtonDataMessage(event.data);
 			} else if (event.data.type === 'GS') {
 				onGameStateMessage(event.data.o)
+			} else if (event.data.type === 'LC') {
+				sendCustomMessage(event.data, event.senderId);
 			}
 		}
+
+		const sendCustomMessage = (payload, senderId = undefined) => {
+			const id = senderId ? senderId : mainCastSenderId;
+			if (context && id) {
+				context.sendCustomMessage(namespace, id, payload);
+			}
+		};
 
 		const onButtonDataMessage = (message) => {
 			if (message.b === 'L') {
