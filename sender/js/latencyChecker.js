@@ -3,6 +3,7 @@ class LatencyChecker {
     _averageTracker = new AverageTracker();
     _intervalId = null;
     _id = 1;
+    _printC = 0;
 
     // sendPayload is a callback that accepts payload (object) and a callback upon recieving answer
     // U can skip the callback and manually call onRecievedAnswer if that better suits your need.
@@ -35,7 +36,13 @@ class LatencyChecker {
         }
         let latency = now - start;
         this._averageTracker.addValue(latency);
-        console.log(`Latency H: ${this._averageTracker.highest}, L: ${this._averageTracker.lowest}, A: ${this._averageTracker.average}`);
+
+        if (this._printC >= 10) {
+            this._printC = 0;
+            console.log(`Latency H: ${this._averageTracker.highest}, L: ${this._averageTracker.lowest}, A: ${this._averageTracker.average}`);
+        } else {
+            this._printC += 1;
+        }
     }
 
     newId = () => {

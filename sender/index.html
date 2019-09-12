@@ -33,7 +33,7 @@
   const applicationId = 'F1F2B4A5';
   const namespace = 'urn:x-cast:se.patrikkarlsson.cast.snes-cast';
   const DEBUG = false;
-  const USE_WEBRTC = false;
+  const USE_WEBRTC = true;
 
   let isHost = true; // kinda not used...
 
@@ -122,8 +122,6 @@
       return;
     }
     let parsedMessage = JSON.parse(message);
-    console.log('Recieved message: ' + JSON.stringify(parsedMessage));
-
     if (parsedMessage.type == 'castPeerId') {
         setCastPeerId(parsedMessage.peerId);
     } else if (parsedMessage.type === 'LC') {
@@ -188,7 +186,7 @@
     castPeerId = id;
     if (castPeerId && isConnected(castDataConnection) === false && USE_WEBRTC === true) {
       console.log('USING WEBRTC');
-      castDataConnection = myPeer.connect(castPeerId);
+      castDataConnection = myPeer.connect(castPeerId, { serialization: 'json' });
       castDataConnection.on('open', onCommunicationChannelOpen);
       castDataConnection.on('data', (json) => {
           let parsed = JSON.parse(json);

@@ -42,7 +42,8 @@ class PhaserRenderStateManager {
             } else if (el.active === false) {
                 return result;
             }
-            return result.concat({ a: action, ...spriteDTO });
+            result.push({ a: action, ...spriteDTO });
+            return result;
         }, []);
         
         if (this._onStateChanged && spriteDTOsToSync.length > 0) {
