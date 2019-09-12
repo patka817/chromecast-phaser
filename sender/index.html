@@ -27,26 +27,25 @@
 <script src="js/latencyChecker.js"></script>
 <script src="js/gameinput.js"></script>
 <script src="js/gamepad.js"></script>
-<script src="js/phaserRenderStateManager.js"></script>
 <script src="js/game.js"></script>
 <script>
   const applicationId = 'F1F2B4A5';
   const namespace = 'urn:x-cast:se.patrikkarlsson.cast.snes-cast';
   const DEBUG = false;
-  const USE_WEBRTC = true;
 
   let isHost = true; // kinda not used...
 
   let castPeerId;
-  let castDataConnection;
+  let castMediaConnection;
   let myPeer;
 
   let castContext;
   let currentSession;
 
+  let _canvas;
+  let _localStream;
   let gamepad;
-  let headlessGame;
-  let renderStateManager;
+  let game;
   let latencyChecker = new LatencyChecker();
   
   $(function () {
@@ -59,7 +58,7 @@
     myPeer.connect();
 
     document.getElementById('pause').onclick = () => {
-      if (!headlessGame) {
+      if (!game) {
         showConnectAlert();
         return;
       }
@@ -84,6 +83,22 @@
     if (isAvailable) {
       initializeCastApi();
     }
+  };
+
+  const getLocalStream = () => {
+    if (!_localStream) {
+      _localStream = getCanvas().captureStream();
+    }
+    return _localStream;
+  };
+
+  const getCanvas = () => {
+    if (!_canvas) {
+      _canvas = document.createElement('canvas');
+      _canvas.width = 800;
+      _canvas.height = 600;
+    }
+    return _canvas;
   };
 
   const initializeCastApi = function () {
@@ -145,21 +160,8 @@
     sendCastMessage(payload);
   }
 
-  const sendGameStateMessage = (gameDTOs) => {
-    let state = { type: 'GS', o: gameDTOs };
-      sendCastMessage(state);
-  };
-
   const sendCastMessage = (payload) => {
-    if (USE_WEBRTC) {
-      if (isConnected(castDataConnection)) {
-          castDataConnection.send(JSON.stringify(payload))
-      } else if (currentSession) {
-        // ???! TODO:
-      } else {
-        showConnectAlert();
-      }
-    } else if (currentSession) {
+    if (currentSession) {
       currentSession.sendMessage(namespace, payload).catch(error => {
         console.log(error);
       });
@@ -184,29 +186,19 @@
   const setCastPeerId = (id) => {
     console.log('Setting castPeerId');
     castPeerId = id;
-    if (castPeerId && isConnected(castDataConnection) === false && USE_WEBRTC === true) {
-      console.log('USING WEBRTC');
-      castDataConnection = myPeer.connect(castPeerId, { serialization: 'json' });
-      castDataConnection.on('open', onCommunicationChannelOpen);
-      castDataConnection.on('data', (json) => {
-          let parsed = JSON.parse(json);
-          if (parsed.type === 'LC') {
-            latencyChecker.onRecievedAnswer(parsed);
-          } else {
-            console.log('unknown data sent over WebRTC: ' + json);
-          }
-      });
+    if (castPeerId && isConnected(castMediaConnection) === false) {
+      console.log('Trying to stream with WebRTC :)');
+      castMediaConnection = myPeer.call(castPeerId, getLocalStream());
+      //TODO: we need to get acc:ed when the cast has accepted our call so we can start the game!!
+      //then call onCommunicationChannelOpen...
+      onCommunicationChannelOpen(); // TODO: Not like this, we must be connected.. 
     }
   }
 
   const launch = function () {
     if (currentSession || DEBUG) {
       console.log("running");
-      if (USE_WEBRTC === false) {
-        onCommunicationChannelOpen();
-      } else {
-        getCastPeerId();
-      }
+      getCastPeerId();
     } else {
       cleanup();
     }
@@ -214,8 +206,7 @@
 
   const onCommunicationChannelOpen = () => {
     gamepad.disabled = false;
-    if (initializeGame() === false && renderStateManager) {
-      renderStateManager.sendInitializeState();
+    if (initializeGame() === false) {
       resumeGame();
     }
     startCheckingLatency();
@@ -228,14 +219,10 @@
   };
 
   const initializeGame = () => {
-    if (headlessGame) {
+    if (game) {
       return false;
     }
-    renderStateManager = new PhaserRenderStateManager();
-    renderStateManager.onStateChanged((delta) => {
-        sendGameStateMessage(delta);
-    });
-    headlessGame = startGame(gamepad, renderStateManager);
+    game = startGame(gamepad, getCanvas());
     return true;
   };
 
@@ -269,30 +256,30 @@
       currentSession.removeMessageListener(namespace, onCustomMessage);
       currentSession = null;
     }
-    if (castDataConnection) {
-      castDataConnection.close();
-      castDataConnection = null;
+    if (castMediaConnection) {
+      castMediaConnection.close();
+      castMediaConnection = null;
     }
     gamepad.disabled = true;
   };
 
   const pauseGame = () => {
-    if (headlessGame) {
-      headlessGame.scene.sleep('breakout');
+    if (game) {
+      game.scene.sleep('breakout');
     }
   };
 
   const paused = () => {
-    if (!headlessGame) {
+    if (!game) {
       return false;
     }
-    return headlessGame.scene.isSleeping('breakout');
+    return game.scene.isSleeping('breakout');
   };
 
   const resumeGame = () => {
-    if (headlessGame && currentSession) {
-      headlessGame.scene.wake('breakout');
-    } else if (headlessGame && !currentSession) {
+    if (game && currentSession) {
+      game.scene.wake('breakout');
+    } else if (game && !currentSession) {
       showConnectAlert();
     }
   };

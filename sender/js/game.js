@@ -3,19 +3,10 @@ class Breakout extends Phaser.Scene {
     ball;
     bricks;
     gameInput;
-    stateManager;
 
-    constructor(config, gameInput, phaserRenderStateManager) {
+    constructor(config, gameInput) {
         super(config);
         this.gameInput = gameInput;
-        this.stateManager = phaserRenderStateManager;
-    }
-
-    spritesToSerialize = () => {
-        if (this.paddle && this.ball && this.bricks) {
-            return [this.paddle, this.ball, ...this.bricks.children.entries];
-        }
-        return [];
     }
 
     initialize() {
@@ -80,11 +71,6 @@ class Breakout extends Phaser.Scene {
         }, this);
 
         this.input.on('pointerup', this.startBall, this);
-
-        // Set initial state
-        if (this.stateManager) {
-            this.stateManager.updateSpritesState(this.spritesToSerialize());
-        }
     }
 
     startBall() {
@@ -159,18 +145,13 @@ class Breakout extends Phaser.Scene {
         } else {
             this.paddle.setVelocityX(0);
         }
-
-        if (this.stateManager) {
-            this.stateManager.updateSpritesState(this.spritesToSerialize());
-        }
     }
 }
 
 var config = {
-    type: Phaser.HEADLESS,
     gameTitle: 'Cast Breakout!',
-    parent: 'whoop-whoop',
     autoFocus: false,
+    parent: null,
     physics: {
         default: 'arcade'
     },
@@ -180,8 +161,25 @@ var config = {
     },
 };
 // TODO: allow overriden config params
-const startGame = (gameInput, phaserRenderStateManager) => {
-    config.scene = new Breakout({key: 'breakout'}, gameInput, phaserRenderStateManager);
+const startGame = (gameInput, canvas) => {
+    config.scene = new Breakout({key: 'breakout'}, gameInput);
+    config.canvas = canvas;
+    if (webgl_support()) {
+        config.type = Phaser.WEBGL;
+    } else {
+        console.log('Not supporting webgl :(');
+        config.type = Phaser.CANVAS;
+    }
     var game = new Phaser.Game(config);
     return game;
 }
+
+function webgl_support () { 
+    try {
+     var canvas = document.createElement('canvas'); 
+     return !!window.WebGLRenderingContext &&
+       (canvas.getContext('webgl') || canvas.getContext('experimental-webgl'));
+    } catch(e) {
+      return false;
+    }
+  };
