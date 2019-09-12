@@ -170,6 +170,7 @@ const startGame = (gameInput, canvas) => {
         console.log('Not supporting webgl :(');
         config.type = Phaser.CANVAS;
     }
+    config.type = Phaser.CANVAS;
     var game = new Phaser.Game(config);
     return game;
 }

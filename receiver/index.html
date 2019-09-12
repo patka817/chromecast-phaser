@@ -2,42 +2,33 @@
 <html>
 
 <head>
-	<title>chromecast-nes</title>
+	<title>chromecast-Breakout</title>
 </head>
 <link rel="stylesheet" type="text/css" href="css/style.css">
 
 <body>
 	<div id="nes-wrapper" class="nes-wrapper">
+		<video id='videoStream' autoplay width='100%' height='100%'></video>
 	</div>
 </body>
 <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
 <script src="js/peerjs.min.js"></script>
-<script src="js/phaser.min.js"></script>
-<script src="js/observable.js"></script>
-<script src="js/gameinput.js"></script>
-<script src="js/phaserRenderStateSceneUpdater.js"></script>
-<script src="js/game.js"></script>
 <script>
 	const namespace = 'urn:x-cast:se.patrikkarlsson.cast.snes-cast';
 	let myPeer;
 	let mainCastSenderId;
 	let remotePeerConnected = false;
-	let dataConnection;
+	let mediaConnection;
 	let context;
-	let game;
-	let gameInput = new GameInput();
-	let parent = document.getElementsByClassName('nes-wrapper')[0];
-	let sceneUpdater;
+
+	let video = document.getElementById('videoStream');
 
 	window.onload = function () {
 		const initialize = () => {
 			console.log('initializing peer');
 			myPeer = new Peer();
 			myPeer.on('open', onOpen);
-			myPeer.on('call', () => {
-				console.log('We should not be called!');
-			});
-			myPeer.on('connection', onConnect);
+			myPeer.on('call', onCall);
 			myPeer.on('close', onClose);
 			myPeer.on('disconnected', onDisconnected);
 			myPeer.on('error', onError);
@@ -56,8 +47,6 @@
 			context.addEventListener(cast.framework.events.EventType.READY, onCastReady);
 
 			context.start(options);
-			game = startGame(gameInput, parent);
-			sceneUpdater = new PhaserRenderStateSceneUpdater(game);
 		};
 
 		const onCastReady = (event) => {
@@ -73,22 +62,18 @@
 			}
 		}
 
-		const onConnect = (connection) => {
-			if (dataConnection) {
-				dataConnection.close();
+		const onCall = (connection) => {
+			if (mediaConnection) {
+				mediaConnection.close();
 			}
-			dataConnection = connection;
-			dataConnection.on('data', (data) => {
-				const parsed = JSON.parse(data);
-				
-				if (parsed.type === 'b') {
-					onButtonDataMessage(parsed);
-				} else if (parsed.type === 'GS') {
-					onGameStateMessage(parsed.o);
-				} else if (parsed.type === 'LC') {
-					dataConnection.send(data);
-				}
-			});
+			mediaConnection = connection;
+			mediaConnection.on('stream', onStream);
+			// todo: handle disconnect/error events
+			mediaConnection.answer();
+		};
+
+		const onStream = (stream) => {
+			video.srcObject = stream;
 		};
 
 		const onOpen = (id) => {
@@ -142,10 +127,6 @@
 				trySendingPeerId(event.senderId);
 			} else if (event.data.type == 'ping') {
 				console.log('Got pinged!');
-			} else if (event.data.type === 'b') {
-				onButtonDataMessage(event.data);
-			} else if (event.data.type === 'GS') {
-				onGameStateMessage(event.data.o)
 			} else if (event.data.type === 'LC') {
 				sendCustomMessage(event.data, event.senderId);
 			}
@@ -156,18 +137,6 @@
 			if (context && id) {
 				context.sendCustomMessage(namespace, id, payload);
 			}
-		};
-
-		const onButtonDataMessage = (message) => {
-			if (message.b === 'L') {
-				gameInput.setLeftIsDown(message.a === 'D');
-			} else if (message.b === 'R') {
-				gameInput.setRightIsDown(message.a === 'D');
-			}
-		};
-
-		const onGameStateMessage = (objects) => {
-			sceneUpdater.renderStateObjects(objects);
 		};
 
 		initialize();
