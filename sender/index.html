@@ -29,6 +29,7 @@
 <script src="js/gamepad.js"></script>
 <script src="js/phaserRenderStateManager.js"></script>
 <script src="js/game.js"></script>
+<script src="js/rtcmesh.js"></script>
 <script>
   const applicationId = 'F1F2B4A5';
   const namespace = 'urn:x-cast:se.patrikkarlsson.cast.snes-cast';
@@ -38,8 +39,7 @@
   let isHost = true; // kinda not used...
 
   let castPeerId;
-  let castDataConnection;
-  let myPeer;
+  let mesh;
 
   let castContext;
   let currentSession;
@@ -51,12 +51,16 @@
   
   $(function () {
     console.log('initializing peer');
-    myPeer = new Peer();
-    myPeer.on('open', onOpen);
-    myPeer.on('close', onClose);
-    myPeer.on('disconnected', onDisconnected);
-    myPeer.on('error', onError);
-    myPeer.connect();
+    mesh = new Mesh();
+    mesh.on(MESH_EVENT_PEER_CONNECTED, onCommunicationChannelOpen);
+    mesh.on(MESH_EVENT_RECIEVED_DATA, (event) => {
+      let parsed = event.data;
+      if (parsed.type === 'LC') {
+        latencyChecker.onRecievedAnswer(parsed);
+      } else {
+        console.log('unknown data sent over WebRTC: ' + parsed);
+      }
+    });
 
     document.getElementById('pause').onclick = () => {
       if (!headlessGame) {
@@ -152,11 +156,10 @@
 
   const sendCastMessage = (payload) => {
     if (USE_WEBRTC) {
-      if (isConnected(castDataConnection)) {
-          castDataConnection.send(JSON.stringify(payload))
-      } else if (currentSession) {
-        // ???! TODO:
-      } else {
+      try {
+          mesh.sendTo(castPeerId, payload);
+      } catch (error) {
+        console.log(error.message);
         showConnectAlert();
       }
     } else if (currentSession) {
@@ -174,28 +177,12 @@
     }
   };
 
-  const isConnected = (connection) => {
-    if (connection === undefined || connection === null) {
-      return false;
-    }
-    return connection.open === true;
-  }
-
   const setCastPeerId = (id) => {
     console.log('Setting castPeerId');
     castPeerId = id;
-    if (castPeerId && isConnected(castDataConnection) === false && USE_WEBRTC === true) {
+    if (castPeerId && USE_WEBRTC === true) {
       console.log('USING WEBRTC');
-      castDataConnection = myPeer.connect(castPeerId, { serialization: 'json' });
-      castDataConnection.on('open', onCommunicationChannelOpen);
-      castDataConnection.on('data', (json) => {
-          let parsed = JSON.parse(json);
-          if (parsed.type === 'LC') {
-            latencyChecker.onRecievedAnswer(parsed);
-          } else {
-            console.log('unknown data sent over WebRTC: ' + json);
-          }
-      });
+      mesh.connectToPeer(castPeerId);
     }
   }
 
@@ -239,40 +226,16 @@
     return true;
   };
 
-  const onOpen = (id) => {
-    console.log('Connected to Peer-server with id: ' + id);
-  };
-
-  const onClose = () => {
-    console.log('Closed');
-    cleanup();
-    myPeer.destroy();
-  };
-
-  const onDisconnected = () => {
-    console.log('disconnected');
-    if (!castPeerId) {
-      myPeer.reconnect();
-    }
-  };
-
-  const onError = error => {
-    console.log(error);
-  };
-
   const cleanup = () => {
     console.log('Cleaning up');
-    castPeerId = null;
     latencyChecker.stopChecking();
     pauseGame();
     if (currentSession) {
       currentSession.removeMessageListener(namespace, onCustomMessage);
       currentSession = null;
     }
-    if (castDataConnection) {
-      castDataConnection.close();
-      castDataConnection = null;
-    }
+    mesh.removePeer(castPeerId);
+    castPeerId = null;
     gamepad.disabled = true;
   };
 

@@ -79,13 +79,11 @@
 			}
 			dataConnection = connection;
 			dataConnection.on('data', (data) => {
-				const parsed = JSON.parse(data);
-				
-				if (parsed.type === 'b') {
-					onButtonDataMessage(parsed);
-				} else if (parsed.type === 'GS') {
-					onGameStateMessage(parsed.o);
-				} else if (parsed.type === 'LC') {
+				if (data.type === 'b') {
+					onButtonDataMessage(data);
+				} else if (data.type === 'GS') {
+					onGameStateMessage(data.o);
+				} else if (data.type === 'LC') {
 					dataConnection.send(data);
 				}
 			});
