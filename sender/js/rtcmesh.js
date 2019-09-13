@@ -8,9 +8,7 @@ const MESH_EVENT_CLOSE = 'close';
 const MESH_EVENT_OPEN = 'open';
 const MESH_EVENT_DESTROYED = 'destroyed';
 
-const MESH_TYPE_UPDATE = 'MU';
 const MESH_ACTION_ADD_PEER = 'MAP';
-const MESH_ACTION_REMOVE_PEER = 'MRP';
 
 class Mesh {
     _myPeer = null;
@@ -103,7 +101,7 @@ class Mesh {
             this._pendingPeers.delete(peerId);
             this._connectedPeers.set(peerId, peer);
 
-            let payload = { meshType: MESH_TYPE_UPDATE, action: MESH_ACTION_ADD_PEER, peerId: peerId };
+            let payload = { meshAction: MESH_ACTION_ADD_PEER, peerId: peerId };
             this.broadcast(payload);
         }
 
@@ -112,21 +110,15 @@ class Mesh {
         }
     }
 
-    _isMeshData = (data) => {
-        return typeof(data) === 'object' && ('meshType' in data) && data.meshType === MESH_TYPE_UPDATE;
-    };
-
     _recievedData = (data, peerId) => {
         if (this._isMeshData(data)) {
-            const { action, peerId } = data;
-            if (!peerId || !action) {
+            const { meshAction, peerId } = data;
+            if (!peerId || !meshAction) {
                 console.error('Missing peerId/action from data: ' + JSON.stringify(data));
                 return;
             }
-            if (action === MESH_ACTION_ADD_PEER) {
+            if (meshAction === MESH_ACTION_ADD_PEER) {
                 this.connectToPeer(peerId);
-            } else if (action === MESH_ACTION_REMOVE_PEER) {
-                this.removePeer(peerId);
             } else {
                 console.error('Invalid action sent with mesh-data: ' + JSON.stringify(data));
             }
@@ -134,6 +126,10 @@ class Mesh {
             this._emitEvent(MESH_EVENT_RECIEVED_DATA, { peerId, data });
         }
     }
+
+    _isMeshData = (data) => {
+        return typeof(data) === 'object' && ('meshAction' in data) && data.meshAction === MESH_ACTION_ADD_PEER;
+    };
 
     _onDataConnection = (dataConnection) => {
         const remotePeerId = dataConnection.peer;
